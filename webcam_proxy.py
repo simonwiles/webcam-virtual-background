@@ -36,6 +36,8 @@ def stream(output_device):
 
     while True:
         frame = get_frame(cap)
+        # fake webcam expects RGB
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         fake.schedule_frame(frame)
 
 
