@@ -11,6 +11,7 @@ ipython = "*"
 [packages]
 opencv-python = "*"
 pyfakewebcam = "*"
+requests = "*"
 
 [requires]
 python_version = "3.8"
