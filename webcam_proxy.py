@@ -2,6 +2,8 @@
 
 """ Virtual Background Webcam Proxy """
 
+import logging
+
 import cv2
 import pyfakewebcam
 import requests
@@ -94,7 +96,8 @@ def stream(output_device):
     background = cv2.imread("/home/simon/Star-Destroyer.640.jpg")
     background_scaled = cv2.resize(background, (width, height))
 
-    print("Initialization complete, waiting for bodypix...")
+    logging.info("Initialization complete, waiting for bodypix...")
+    out = False
     while True:
         frame = get_frame(cap)
 
@@ -105,9 +108,15 @@ def stream(output_device):
             try:
                 mask = get_mask(frame)
             except requests.RequestException:
-                print("mask request failed, retrying")
+                logging.debug("mask request failed, retrying")
+                pass
+
         mask = post_process_mask(mask)
         frame = starwars_hologram(frame)
+
+        if not out:
+            logging.info("ready")
+            out = True
 
         # composite the foreground and background
         inv_mask = 1 - mask
@@ -122,4 +131,9 @@ def stream(output_device):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
     stream("/dev/video20")
