@@ -4,6 +4,8 @@
 
 import cv2
 import pyfakewebcam
+import requests
+
 import numpy as np
 
 # configure camera for 480p @ 60 FPS
@@ -46,6 +48,25 @@ def starwars_hologram(frame):
     return new_frame
 
 
+def get_mask(frame, bodypix_url="http://localhost:9000"):
+    _, data = cv2.imencode(".jpg", frame)
+    r = requests.post(
+        url=bodypix_url,
+        data=data.tobytes(),
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    mask = np.frombuffer(r.content, dtype=np.uint8)
+    mask = mask.reshape((frame.shape[0], frame.shape[1]))
+    return mask
+
+
+def post_process_mask(mask):
+    mask = cv2.dilate(mask, np.ones((10, 10), np.uint8), iterations=1)
+    # mask = cv2.erode(mask, np.ones((10, 10), np.uint8), iterations=1)
+    mask = cv2.blur(mask.astype(float), (30, 30))
+    return mask
+
+
 def init_capture(device="/dev/video0"):
     cap = cv2.VideoCapture(device)
 
@@ -70,9 +91,31 @@ def stream(output_device):
     # initialize the fake camera
     fake = pyfakewebcam.FakeWebcam(output_device, width, height)
 
+    background = cv2.imread("/home/simon/Star-Destroyer.640.jpg")
+    background_scaled = cv2.resize(background, (width, height))
+
+    print("Initialization complete, waiting for bodypix...")
     while True:
         frame = get_frame(cap)
+
+        # fetch the mask with retries (the app needs to warmup and we're lazy)
+        # e v e n t u a l l y c o n s i s t e n t
+        mask = None
+        while mask is None:
+            try:
+                mask = get_mask(frame)
+            except requests.RequestException:
+                print("mask request failed, retrying")
+        mask = post_process_mask(mask)
         frame = starwars_hologram(frame)
+
+        # composite the foreground and background
+        inv_mask = 1 - mask
+        for c in range(frame.shape[2]):
+            frame[:, :, c] = (
+                frame[:, :, c] * mask + background_scaled[:, :, c] * inv_mask
+            )
+
         # fake webcam expects RGB
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         fake.schedule_frame(frame)
